@@ -35,8 +35,11 @@ class Occa(Package):
     variant("cuda", default=True, description="Activates support for CUDA")
     variant("openmp", default=True, description="Activates support for OpenMP")
     variant("opencl", default=True, description="Activates support for OpenCL")
+    variant("rocm", default=False, description="Activates support for HIP")
 
     depends_on("cuda", when="+cuda")
+    depends_on("hip", when="+rocm")
+    depends_on("rocm-opencl", when="+rocm+opencl")
 
     conflicts("%gcc@6:", when="^cuda@:8")
     conflicts("%gcc@7:", when="^cuda@:9")
@@ -64,6 +67,9 @@ class Occa(Package):
             cuda_dir = spec["cuda"].prefix
             # Run-time CUDA compiler:
             s_env.set("OCCA_CUDA_COMPILER", join_path(cuda_dir, "bin", "nvcc"))
+        if "+rocm" in spec:
+            hip_dir = spec["hip"].prefix
+            s_env.set("OCCA_HIP_COMPILER", join_path(hip_dir, "bin", "hipcc"))
 
     def setup_build_environment(self, env):
         spec = self.spec
@@ -94,8 +100,29 @@ class Occa(Package):
         else:
             env.set("OCCA_CUDA_ENABLED", "0")
 
-        # Disable hip autodetection for now since it fails on some machines.
-        env.set("OCCA_HIP_ENABLED", "0")
+        if "+rocm" in spec:
+            rocm_include = find_headers("*", spec["hip"].prefix.include, recursive=True)
+            rocm_libs = find_libraries("*", spec["hip"].prefix.lib, shared=True, recursive=True)
+            env.set("HIP_PLATFORM", "AMD")
+            env.set("HIP_ROOT", spec["hip"].prefix)
+
+            env.set(
+                "CXXFLAGS", "-D__HIP_PLATFORM_HCC__= -D__HIP_PLATFORM_AMD__= " + " ".join(cxxflags)
+            )
+
+            # ROCm OpenCL libraries are separate from the HIP package
+            if "+opencl" in spec:
+                rocm_include += spec["rocm-opencl"].prefix.include
+                rocm_libs += find_libraries(
+                    "libOpenCL", spec["rocm-opencl"].prefix, shared=True, recursive=True
+                )
+                env.set("OCCA_OPENCL_ENABLED", "1")
+            env.set("LDFLAGS", rocm_libs.link_flags)
+            env.set("OCCA_INCLUDE_PATH", ":".join(rocm_include.directories))
+            env.set("OCCA_LIBRARY_PATH", ":".join(rocm_libs.directories))
+            env.set("OCCA_HIP_ENABLED", "1")
+        else:
+            env.set("OCCA_HIP_ENABLED", "0")
 
         if "~opencl" in spec:
             env.set("OCCA_OPENCL_ENABLED", "0")

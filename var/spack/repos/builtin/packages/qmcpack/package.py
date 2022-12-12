@@ -8,7 +8,7 @@ import llnl.util.tty as tty
 from spack.package import *
 
 
-class Qmcpack(CMakePackage, CudaPackage):
+class Qmcpack(CMakePackage, CudaPackage, ROCmPackage):
     """QMCPACK, is a modern high-performance open-source Quantum Monte
     Carlo (QMC) simulation code."""
 
@@ -113,11 +113,18 @@ class Qmcpack(CMakePackage, CudaPackage):
     conflicts("^openblas threads=pthreads", msg="QMCPACK does not support OpenBLAS with pthreads")
 
     conflicts(
+        "+rocm", when="+cuda", msg="HIP support can only be enabled when CUDA support is disabled"
+    )
+    conflicts(
+        "+cuda", when="+rocm", msg="CUDA support can only be enabled when HIP support is disabled"
+    )
+    conflicts(
         "cuda_arch=none",
         when="+cuda",
         msg="A value for cuda_arch must be specified. Add cuda_arch=XX",
     )
 
+    conflicts("+rocm", when="@:3.3.0", msg="HIP support is available for version 3.3 and higher")
     # Omitted for now due to concretizer bug
     # conflicts('^intel-mkl+ilp64',
     #           msg='QMCPACK does not support MKL 64-bit integer variant')
@@ -174,6 +181,7 @@ class Qmcpack(CMakePackage, CudaPackage):
     depends_on("libxml2")
     depends_on("mpi", when="+mpi")
     depends_on("python@3:", when="@3.9:")
+    depends_on("hipblas", when="+rocm")
 
     # HDF5
     depends_on("hdf5~mpi", when="~phdf5")
@@ -320,6 +328,21 @@ class Qmcpack(CMakePackage, CudaPackage):
                 args.append("-DCMAKE_CUDA_ARCHITECTURES={0}".format(cuda_arch))
             else:
                 args.append("-DCUDA_ARCH=sm_{0}".format(cuda_arch))
+        elif "+rocm" in spec:
+            args += [
+                "-DENABLE_ROCM=1",
+                "-DQMC_CUDA=1",
+                "-DQMC_CUDA2HIP=1",
+                f"-DROCM_ROOT={spec['hip'].prefix}",
+            ]
+            rocm_arch_list = spec.variants["amdgpu_target"].value
+            rocm_arch = rocm_arch_list[0]
+            if len(rocm_arch_list) > 1:
+                raise InstallError(
+                    "QMCPACK only supports compilation for a single GPU architecture at a time"
+                )
+            if rocm_arch != "none":
+                args += [f"-DROCM_ARCH={rocm_arch}"]
         else:
             args.append("-DQMC_CUDA=0")
 
