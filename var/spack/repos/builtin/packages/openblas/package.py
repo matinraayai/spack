@@ -1,4 +1,4 @@
-# Copyright 2013-2022 Lawrence Livermore National Security, LLC and other
+# Copyright 2013-2023 Lawrence Livermore National Security, LLC and other
 # Spack Project Developers. See the top-level COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: (Apache-2.0 OR MIT)
@@ -14,7 +14,7 @@ class Openblas(MakefilePackage):
     """OpenBLAS: An optimized BLAS library"""
 
     homepage = "https://www.openblas.net"
-    url = "https://github.com/xianyi/OpenBLAS/archive/v0.2.19.tar.gz"
+    url = "https://github.com/xianyi/OpenBLAS/releases/download/v0.2.19/OpenBLAS-0.2.19.tar.gz"
     git = "https://github.com/xianyi/OpenBLAS.git"
 
     libraries = ["libopenblas"]
@@ -463,10 +463,7 @@ class Openblas(MakefilePackage):
 
     @property
     def install_targets(self):
-        make_args = [
-            "install",
-            "PREFIX={0}".format(self.prefix),
-        ]
+        make_args = ["install", "PREFIX={0}".format(self.prefix)]
         return make_args + self.make_defs
 
     @run_after("install")
